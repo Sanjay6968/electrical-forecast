@@ -13,7 +13,32 @@ app = FastAPI(title="GridCastAI Enterprise API", version="1.0.0")
 
 class InferenceInput(BaseModel):
     data: List[dict]
-
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "data": [
+                    {
+                        "measurement_timestamp": "2023-10-01 12:00:00",
+                        "lag_1": 1.52, "lag_2": 1.41, "lag_3": 1.63,
+                        "lag_6": 2.05, "lag_12": 1.11, "lag_24": 1.50,
+                        "lag_48": 1.44, "lag_72": 1.51, "lag_168": 1.33,
+                        "rolling_mean_6": 1.55, "rolling_mean_12": 1.42,
+                        "rolling_mean_24": 1.51, "rolling_mean_168": 1.40,
+                        "rolling_std_24": 0.21, "rolling_max_24": 2.55,
+                        "rolling_min_24": 0.52, "rolling_median_24": 1.45,
+                        "ema_24": 1.50, "hour": 12, "weekday": 2,
+                        "month": 10, "quarter": 4, "is_weekend": 0,
+                        "hour_sin": 0.0, "hour_cos": -1.0,
+                        "weekday_sin": 0.97, "weekday_cos": -0.22,
+                        "hourly_change": 0.11, "daily_change": 0.02,
+                        "rolling_range_24": 2.03, "ema_168": 1.41,
+                        "rolling_skew_24": 0.05, "rolling_kurtosis_24": -0.1,
+                        "is_month_start": 1, "is_month_end": 0
+                    }
+                ]
+            }
+        }
 # Load models at startup
 try:
     models = load_models()
