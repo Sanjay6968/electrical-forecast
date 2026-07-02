@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  fastapi:
+    build: .
+    container_name: gridcast_fastapi
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    command: uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      - mlflow
+
+  mlflow:
+    build: .
+    container_name: gridcast_mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/app/mlruns
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:////app/mlruns/mlflow.db --default-artifact-root /app/mlruns/artifacts
+
+  # Optional Airflow Standalone container for local execution
+  # Included to fulfill the "One command to run FastAPI, MLflow, Application" and Airflow requirements
+  airflow:
+    image: apache/airflow:2.7.0-python3.10
+    container_name: gridcast_airflow
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - .:/app
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    command: standalone

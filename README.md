@@ -1,90 +1,142 @@
-# GridCastAI: Household Electricity Load Forecasting
+# GridCastAI Enterprise MLOps
 
 ## Project Overview
-GridCastAI is an end-to-end machine learning pipeline designed for highly accurate forecasting of household electricity demand. The project utilizes a Direct Multi-Horizon Forecasting methodology to predict electricity loads 24 hours into the future, empowering stakeholders to manage energy distribution more efficiently and reduce grid instability.
+GridCastAI Enterprise MLOps is a production-grade machine learning platform built to forecast household electricity demand. The project leverages Direct Multi-Horizon Forecasting using LightGBM models. This repository demonstrates end-to-end MLOps capabilities including automated workflow orchestration, experiment tracking, model registry, containerized API serving, and CI/CD pipelines.
 
-## Dataset
-This project utilizes the **Individual Household Electric Power Consumption** dataset. It contains 2,075,259 measurements gathered over nearly four years, detailing active and reactive power, voltage, and various sub-metering metrics at a minute-level resolution. The primary target for forecasting in this project is `Global_active_power`.
+---
 
-## Objectives
-1. Perform robust data cleaning and handling of missing values using time-based interpolation.
-2. Construct advanced temporal, cyclical, and rolling statistical features to capture underlying electricity consumption patterns.
-3. Implement a Direct Multi-Horizon Forecasting strategy, utilizing 24 distinct LightGBM regressors to predict the next 24 hours sequentially.
-4. Outperform a naive 24-hour persistence baseline significantly in Mean Absolute Error (MAE).
+## Architecture Diagram
 
-## Project Structure
-```text
-GridCastAI/
-├── data/
-│   └── household_power_consumption.txt   # Raw dataset
-├── models/                               # Serialized LightGBM model files
-├── outputs/
-│   ├── feature_importance.csv            # Average feature importances
-│   ├── forecast_results.csv              # Next 24-hour forecast from last timestamp
-│   └── metrics.csv                       # Evaluation metrics for all 24 horizons
-├── main.py                               # Core executable ML pipeline
-├── forecast_results.png                  # Test set actual vs predicted visualization
-├── requirements.txt                      # Project dependencies
-└── README.md                             # Project documentation
+```mermaid
+graph TD
+    A[Raw Smart Meter Data] -->|Airflow DAG| B(Preprocess & Clean)
+    B --> C(Feature Engineering)
+    C --> D[LightGBM Multi-Horizon Training]
+    
+    D -->|Log Metrics & Artifacts| E[(MLflow Tracking & Registry)]
+    
+    E -.->|Load Models| F[FastAPI Inference Service]
+    
+    G[Client / Utility Dashboard] -->|POST /predict| F
+    
+    F -->|Return Forecasts| G
+    F -->|Log Latency & Usage| H[Monitoring & Drift Detection]
+    H -->|Trigger Retraining if Drifted| A
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style E fill:#bbf,stroke:#333,stroke-width:2px
+    style F fill:#bfb,stroke:#333,stroke-width:2px
+    style H fill:#fbb,stroke:#333,stroke-width:2px
 ```
 
-## Feature Engineering
-The pipeline engineers dozens of features to optimize predictive performance:
-- **Lag Features**: Lags from 1 hour to 1 week (168 hours) to capture recent history.
-- **Rolling Statistics**: Mean, median, max, min, std, skewness, and kurtosis computed over varying windows (e.g., 24 hours).
-- **Cyclical Features**: Sine and cosine transformations of hours and weekdays to capture the periodic nature of human activity.
-- **Trend Features**: Hourly and daily differences to gauge rapid consumption shifts.
+---
 
-## Direct Multi-Horizon Forecasting
-Unlike recursive forecasting (which uses its own predictions as inputs for future steps, causing error accumulation), this project employs **Direct Forecasting**. We train 24 completely separate LightGBM models, one specifically optimized for each hourly horizon ($h=1, 2, ..., 24$).
+## Technology Stack
+- **Modeling**: LightGBM, Pandas, Scikit-Learn
+- **Experiment Tracking & Registry**: MLflow
+- **Serving**: FastAPI, Uvicorn
+- **Orchestration**: Apache Airflow
+- **Containerization**: Docker, Docker Compose
+- **Monitoring**: Python Logging, Evidently AI (Integration Logic)
+- **CI/CD & Testing**: GitHub Actions, Pytest
 
-## LightGBM
-We selected LightGBM due to its industry-leading execution speed, minimal memory footprint, and native handling of high-dimensional temporal datasets.
-**Hyperparameters**:
-- `n_estimators`: 500
-- `learning_rate`: 0.05
-- `num_leaves`: 31
-- `subsample`: 0.8
-- `colsample_bytree`: 0.8
+---
 
-## Evaluation Metrics
-The primary metric used is **Mean Absolute Error (MAE)**. We compare our LightGBM predictions against a Naive Baseline (predicting that demand will simply be exactly what it was 24 hours prior).
+## Folder Structure
 
-## Results
-The Direct Multi-Horizon approach drastically outperforms the naive baseline across every single horizon. The **Overall Average Model MAE** across all 24 horizons rests impressively at roughly `0.4295 kW`, reflecting baseline improvements stretching from ~21% for day-ahead predictions to ~45% for short-term predictions.
+```text
+GridCastAI-MLOps/
+├── api/
+│   └── app.py                     # FastAPI serving endpoints
+├── airflow/
+│   └── dags/
+│       └── forecast_pipeline.py   # Daily Airflow orchestration DAG
+├── monitoring/
+│   └── monitor.py                 # Drift and latency monitoring
+├── src/
+│   ├── preprocess.py              # Data cleaning and ingestion
+│   ├── feature_engineering.py     # Lags, rolling, and temporal features
+│   ├── train.py                   # LightGBM training with MLflow integration
+│   ├── predict.py                 # Forecasting logic
+│   └── utils.py                   # Logging and path utilities
+├── tests/
+│   └── test_pipeline.py           # Pytest unit tests
+├── .github/workflows/
+│   └── ci.yml                     # GitHub Actions CI/CD Pipeline
+├── Dockerfile                     # API and ML Docker image
+├── docker-compose.yml             # Local Multi-Container deployment
+├── main.py                        # Local Orchestrator script
+├── requirements.txt               # Project dependencies
+└── README.md                      # Documentation
+```
 
-## How to Run
+---
 
-1. Ensure Python 3.9+ is installed.
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## MLOps Lifecycle & Pipeline Flow
+1. **Data Ingestion**: Nightly pulls of historical electricity demand.
+2. **Feature Store**: Engineering lag metrics (t-24, t-168) and rolling statistics (mean, std, max, min).
+3. **Training & MLflow**: Training 24 horizon-specific LightGBM models. Hyperparameters, MAE, and RMSE are logged. The best models are stored in the MLflow Model Registry.
+4. **Deployment**: Dockerized FastAPI service pulls the latest registry models into memory.
+5. **Inference**: FastAPI serves `/predict` for single batches and `/batch_predict` for massive inputs.
+6. **Monitoring**: Production latency, prediction counts, and concept drift are continuously logged. 
+
+---
+
+## How to Run (Docker Compose)
+The entire stack can be launched on a standard laptop locally with a single command.
+
+1. Clone the repository and navigate to the root directory.
+2. Ensure you have Docker and Docker Compose installed.
 3. Place `household_power_consumption.txt` inside the `data/` directory.
-4. Execute the pipeline:
+4. Run the stack:
    ```bash
-   python main.py
+   docker compose up --build
    ```
-*The script will autonomously read data, train models, evaluate, and output all CSVs, the visualization, and serialized models without requiring human intervention.*
 
-## Requirements
-See `requirements.txt` for exact versions, consisting of:
-- `pandas`
-- `numpy`
-- `scikit-learn`
-- `lightgbm`
-- `joblib`
-- `matplotlib`
+**Services Launched:**
+- **FastAPI Application**: `http://localhost:8000`
+- **MLflow UI**: `http://localhost:5000`
+- **Airflow Standalone**: `http://localhost:8080`
 
-## Business Question Answers
+*If you do not want to use Docker, you can run the localized ML pipeline via `python main.py`.*
 
-### 1. What would you change if you had to forecast for hundreds of thousands of meters at once instead of one?
-Scaling from a single meter to hundreds of thousands requires a shift from local processing to distributed MLOps:
-- **Data Infrastructure**: I would replace in-memory Pandas with a distributed framework like Apache Spark (PySpark) to handle the out-of-core memory requirements. The raw data would be ingested into a scalable cloud storage solution or time-series database (e.g., Snowflake, TimescaleDB).
-- **Modeling Approach**: Managing 100,000 individual "local" models is an operational bottleneck. I would pivot to a Global Forecasting Model (training a single, highly complex model like LightGBM or a Temporal Fusion Transformer on all meters simultaneously). To retain individual accuracy, I would inject static metadata features (e.g., meter_id, household_size, geography) so the model can learn cross-meter patterns while respecting individual baselines.
-- **Pipeline Automation**: The pipeline would be containerized (Docker) and orchestrated using a tool like Apache Airflow to automate nightly data ingestion, feature engineering, and batch inference.
+---
 
-### 2. Do you think a model like this is used in practice by utilities, or would something simpler win?
-In practice, the choice between a complex ML model and a simple heuristic depends entirely on the deployment environment and the ROI of accuracy:
-- **Grid/Substation Level (Complex Models Win)**: For aggregated forecasting, complex models like XGBoost or LSTMs are the industry standard. At the grid level, a 1% reduction in forecasting error translates to millions of dollars saved in load balancing and peak-generation costs. The infrastructure cost of running the model is negligible compared to the financial savings.
-- **Individual/Edge Level (Simpler Models Win)**: If the goal is to forecast at the individual smart meter level (especially if deployed on the 'Edge' device itself), compute, memory, and inference costs become strict bottlenecks. For millions of individual homes, a lightweight heuristic—such as a dynamic rolling average or a SARIMA model—often provides a 'good enough' forecast at a fraction of the computational cloud cost, resulting in a better overall business ROI.
+## API Documentation
+The FastAPI application provides a REST interface for interacting with the models.
+
+- `GET /health` : Returns system health and model loading status.
+- `GET /model/version` : Returns current model architecture version.
+- `GET /metrics` : Returns Prometheus-style prediction metrics.
+- `POST /predict` : Expects a JSON payload containing raw features and returns 24 hours of forecasts.
+- `POST /retrain` : Triggers the underlying MLOps retraining mechanism.
+
+You can interact with the Swagger UI at `http://localhost:8000/docs` once running.
+
+---
+
+## Scaling Strategy (1 Meter to 100,000+ Meters)
+While this repository runs a localized demonstration on Docker, the architecture seamlessly scales:
+- **Compute (Airflow/Spark)**: The Pandas preprocessing would be swapped to a PySpark DataFrame backend executing on an EMR cluster to process 100k+ meters simultaneously.
+- **Serving (FastAPI/K8s)**: The Dockerized API would be deployed to a Kubernetes cluster (EKS/GKE) with Horizontal Pod Autoscaling (HPA) to handle thousands of concurrent API requests from edge devices.
+- **Registry (MLflow/S3)**: The SQLite MLflow backend is replaced with a managed PostgreSQL database, and artifacts are streamed into a cloud bucket (AWS S3) rather than a local `./mlruns` directory.
+
+---
+
+## Business Value
+By replacing simple recursive forecasting heuristics with Direct Multi-Horizon Machine Learning via LightGBM, Grid operators eliminate cascading temporal errors. By wrapping this logic in an enterprise MLflow/FastAPI/Airflow ecosystem, the utility achieves zero-downtime deployments, immediate visibility into data drift, and fully automated daily retraining, resulting in massive reductions in peak-generation costs.
+
+---
+
+## Business Questions & Analysis
+
+**1. What would you change if you had to forecast for hundreds of thousands of meters at once instead of one?**
+* **Data Infrastructure**: Scaling from a single meter requires shifting from local, in-memory Pandas processing to distributed MLOps using frameworks like Apache Spark (PySpark). The raw streaming data would be ingested into scalable time-series databases like Snowflake or TimescaleDB.
+* **Modeling Approach**: Training and maintaining 100,000 distinct "local" models is an operational bottleneck. I would pivot to a **Global Forecasting Model** (training a single, highly generalized model like LightGBM or a Temporal Fusion Transformer across all meters simultaneously). To ensure accuracy for individual households, I would inject static metadata features (e.g., `meter_id`, `household_size`, `geographic_zone`) allowing the model to learn global patterns while respecting localized baselines.
+* **Pipeline Automation**: The inference pipeline would be heavily containerized via Kubernetes (EKS/GKE) for elastic scaling to process batch forecasts asynchronously during off-peak hours.
+
+**2. What are the key drivers of electricity demand according to the model?**
+According to the `feature_importances_` extracted from the LightGBM models during training, the dominant drivers of electricity demand are:
+* **Recent Autoregressive Lags (`lag_1`, `lag_2`, `lag_24`)**: The absolute most predictive signal for current demand is what the demand was exactly 1 hour ago, and what it was at this exact same hour yesterday.
+* **Temporal & Cyclical Features (`hour`, `hour_sin`, `hour_cos`)**: Human behavior dictates electricity usage. The time of day (morning routines, evening peaks when families return home) strongly partitions the model's decision trees.
+* **Rolling Volatility (`rolling_range_24`, `rolling_std_24`)**: Identifying whether the household is currently in a highly volatile usage state or a dormant baseline state heavily influences the magnitude of the predicted spikes.
